@@ -1,6 +1,7 @@
 
 "use client";
 
+import React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -71,9 +72,9 @@ export default function SignupPage() {
     } else {
         toast({
           title: "Cadastro Realizado!",
-          description: "Agora, por favor, envie seus documentos.",
+          description: "Você pode fazer login agora.",
         });
-        router.push(`/signup/documents?role=${values.role}`);
+        router.push('/');
     }
   };
 

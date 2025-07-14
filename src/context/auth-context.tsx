@@ -1,84 +1,183 @@
-
 "use client";
 
-import React, { createContext, useState, useContext, ReactNode, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Car, User, ArrowLeft, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import type { User as SupabaseUser, AuthError } from "@supabase/supabase-js";
+import React from "react";
 
-export type UserRole = "passenger" | "driver" | "admin";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { useToast } from "@/hooks/use-toast";
 
-interface UserProfile {
-  name: string;
-  role: UserRole;
-}
+const formSchema = z.object({
+  name: z.string().min(2, { message: "O nome deve ter pelo menos 2 caracteres." }),
+  email: z.string().email({ message: "Por favor, insira um email válido." }),
+  password: z.string().min(8, { message: "A senha deve ter pelo menos 8 caracteres." }),
+  role: z.enum(["passenger", "driver"], {
+    required_error: "Você precisa selecionar um perfil.",
+  }),
+});
 
-interface User extends SupabaseUser, UserProfile {}
-
-interface AuthContextType {
-  user: User | null;
-  login: (credentials: {email: string, password: string}) => Promise<{error: AuthError | null}>;
-  logout: () => Promise<void>;
-  isLoading: boolean;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+export default function SignupPage() {
   const router = useRouter();
+  const { toast } = useToast();
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setIsLoading(true);
-        if (session) {
-          const supabaseUser = session.user;
-          // In a real app, you'd fetch the user's role and name from a 'profiles' table.
-          // For now, we'll derive it from the email for demo purposes.
-          const role = (supabaseUser.email?.split('@')[0] as UserRole) || 'passenger';
-          const name = supabaseUser.user_metadata.name || `${role.charAt(0).toUpperCase() + role.slice(1)} User`;
-          
-          setUser({ ...supabaseUser, role, name });
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      password: "",
+    },
+    mode: "onChange",
+  });
 
-        } else {
-          setUser(null);
+  const role = form.watch("role");
+
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    setIsSubmitting(true);
+    const { error } = await supabase.auth.signUp({
+      email: values.email,
+      password: values.password,
+      options: {
+        data: {
+          name: values.name,
+          role: values.role,
         }
-        setIsLoading(false);
       }
-    );
+    });
 
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
-
-  const login = async (credentials: {email: string, password: string}) => {
-    const { error } = await supabase.auth.signInWithPassword(credentials);
-    if (!error) {
-       router.refresh(); // Refresh server components
+    if (error) {
+       toast({
+        variant: "destructive",
+        title: "Erro no Cadastro",
+        description: error.message,
+      });
+      setIsSubmitting(false);
+    } else {
+        toast({
+          title: "Cadastro Realizado!",
+          description: "Agora, por favor, envie seus documentos.",
+        });
+        router.push(`/signup/documents?role=${values.role}`);
     }
-    return { error };
-  };
-
-  const logout = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    router.push("/");
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
-      {children}
-    </AuthContext.Provider>
-  );
-};
+    <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
+      <div className="w-full max-w-sm">
+        <Button variant="ghost" size="icon" className="absolute top-4 left-4" onClick={() => router.push('/')}>
+            <ArrowLeft />
+        </Button>
+        <div className="text-center mb-8">
+            <Car className="h-12 w-12 mx-auto text-primary" />
+            <h1 className="text-4xl font-bold text-primary mt-2">Criar Conta</h1>
+            <p className="text-muted-foreground">Comece sua jornada com TriDriver.</p>
+        </div>
+        
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+               <FormField
+                control={form.control}
+                name="role"
+                render={({ field }) => (
+                  <FormItem className="space-y-3 pt-2">
+                    <FormLabel>Eu sou...</FormLabel>
+                    <FormControl>
+                      <RadioGroup
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                        className="flex gap-4"
+                      >
+                        <FormItem className="flex-1">
+                          <RadioGroupItem value="passenger" id="passenger" className="sr-only" />
+                          <FormLabel htmlFor="passenger" className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer transition-all">
+                            <User className="mb-3 h-6 w-6" />
+                            Passageiro
+                          </FormLabel>
+                        </FormItem>
+                        <FormItem className="flex-1">
+                          <RadioGroupItem value="driver" id="driver" className="sr-only" />
+                           <FormLabel htmlFor="driver" className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer transition-all">
+                            <Car className="mb-3 h-6 w-6" />
+                            Motorista
+                          </FormLabel>
+                        </FormItem>
+                      </RadioGroup>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
-};
+              {role && (
+                <div className="space-y-4 animate-in fade-in-0 slide-in-from-top-4 duration-500">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <Input placeholder="Nome Completo" {...field} className="h-12 text-base" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <Input placeholder="Email" {...field} className="h-12 text-base" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <Input type="password" placeholder="Senha" {...field} className="h-12 text-base" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                   <Button type="submit" className="w-full !mt-6 h-12 text-lg font-bold" disabled={!form.formState.isValid || isSubmitting}>
+                     {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Continuar
+                  </Button>
+                </div>
+              )}
+            </form>
+          </Form>
+        
+        <div className="mt-8 text-center text-sm text-muted-foreground">
+            Já tem uma conta?{" "}
+            <Link href="/" className="font-semibold text-primary hover:underline">
+              Entrar
+            </Link>
+          </div>
+      </div>
+    </main>
+  );
+}
