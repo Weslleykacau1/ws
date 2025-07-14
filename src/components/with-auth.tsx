@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useAuth, UserRole } from "@/context/auth-context";
@@ -14,13 +15,19 @@ export function withAuth<P extends object>(
     const router = useRouter();
 
     useEffect(() => {
-      if (!isLoading) {
-        if (!user) {
-          router.replace("/");
-        } else if (allowedRoles && !allowedRoles.includes(user.role)) {
-          router.replace("/"); // Or a dedicated "unauthorized" page
-        }
+      if (isLoading) return;
+
+      if (!user) {
+        router.replace("/");
+        return;
       }
+
+      if (allowedRoles && !allowedRoles.includes(user.role)) {
+        // If user is logged in but tries to access a page for another role,
+        // redirect them to their own dashboard.
+        router.replace(`/${user.role}`);
+      }
+      
     }, [user, isLoading, router]);
 
     if (isLoading || !user || (allowedRoles && !allowedRoles.includes(user.role))) {

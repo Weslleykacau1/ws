@@ -1,20 +1,24 @@
+
 "use client";
 
 import React, { createContext, useState, useContext, ReactNode, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+import type { User as SupabaseUser, AuthError } from "@supabase/supabase-js";
 
 export type UserRole = "passenger" | "driver" | "admin";
 
-interface User {
+interface UserProfile {
   name: string;
-  email: string;
   role: UserRole;
 }
 
+interface User extends SupabaseUser, UserProfile {}
+
 interface AuthContextType {
   user: User | null;
-  login: (userData: User) => void;
-  logout: () => void;
+  login: (credentials: {email: string, password: string}) => Promise<{error: AuthError | null}>;
+  logout: () => Promise<void>;
   isLoading: boolean;
 }
 
@@ -26,26 +30,40 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const router = useRouter();
 
   useEffect(() => {
-    try {
-      const storedUser = sessionStorage.getItem("tridriver_user");
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
-      }
-    } catch (error) {
-        console.error("Failed to parse user from session storage", error);
-        sessionStorage.removeItem("tridriver_user");
-    } finally {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        setIsLoading(true);
+        if (session) {
+          const supabaseUser = session.user;
+          // In a real app, you'd fetch the user's role and name from a 'profiles' table.
+          // For now, we'll derive it from the email for demo purposes.
+          const role = (supabaseUser.email?.split('@')[0] as UserRole) || 'passenger';
+          const name = supabaseUser.user_metadata.name || `${role.charAt(0).toUpperCase() + role.slice(1)} User`;
+          
+          setUser({ ...supabaseUser, role, name });
+
+        } else {
+          setUser(null);
+        }
         setIsLoading(false);
-    }
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const login = (userData: User) => {
-    sessionStorage.setItem("tridriver_user", JSON.stringify(userData));
-    setUser(userData);
+  const login = async (credentials: {email: string, password: string}) => {
+    const { error } = await supabase.auth.signInWithPassword(credentials);
+    if (!error) {
+       router.refresh(); // Refresh server components
+    }
+    return { error };
   };
 
-  const logout = () => {
-    sessionStorage.removeItem("tridriver_user");
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
     router.push("/");
   };

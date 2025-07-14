@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Car, User, ArrowLeft } from "lucide-react";
+import { Car, User, ArrowLeft, Loader2 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,7 @@ const formSchema = z.object({
 export default function SignupPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -40,19 +42,39 @@ export default function SignupPage() {
       name: "",
       email: "",
       password: "",
-      // O role não terá um valor padrão para forçar a seleção
     },
     mode: "onChange",
   });
 
   const role = form.watch("role");
 
-  const onSubmit = (values: z.infer<typeof formSchema>) => {
-    toast({
-      title: "Cadastro Inicial Realizado!",
-      description: "Agora, por favor, envie seus documentos.",
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    setIsSubmitting(true);
+    const { error } = await supabase.auth.signUp({
+      email: values.email,
+      password: values.password,
+      options: {
+        data: {
+          name: values.name,
+          role: values.role,
+        }
+      }
     });
-    router.push(`/signup/documents?role=${values.role}`);
+
+    if (error) {
+       toast({
+        variant: "destructive",
+        title: "Erro no Cadastro",
+        description: error.message,
+      });
+      setIsSubmitting(false);
+    } else {
+        toast({
+          title: "Cadastro Realizado!",
+          description: "Agora, por favor, envie seus documentos.",
+        });
+        router.push(`/signup/documents?role=${values.role}`);
+    }
   };
 
   return (
@@ -140,7 +162,8 @@ export default function SignupPage() {
                       </FormItem>
                     )}
                   />
-                   <Button type="submit" className="w-full !mt-6 h-12 text-lg font-bold" disabled={!form.formState.isValid}>
+                   <Button type="submit" className="w-full !mt-6 h-12 text-lg font-bold" disabled={!form.formState.isValid || isSubmitting}>
+                     {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Continuar
                   </Button>
                 </div>
